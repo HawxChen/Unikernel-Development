@@ -1,0 +1,204 @@
+diff --git a/Makefile b/Makefile
+index 69b27da..6a8323c 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1662,6 +1662,7 @@ libc += unistd/getsid.o
+ libc += unistd/setsid.o
+ libc += unistd/ttyname_r.o
+ libc += unistd/ttyname.o
++libc += unistd/dup3.o
+ 
+ musl += regex/fnmatch.o
+ musl += regex/glob.o
+diff --git a/fs/vfs/main.cc b/fs/vfs/main.cc
+index 924bfad..77210d9 100644
+--- a/fs/vfs/main.cc
++++ b/fs/vfs/main.cc
+@@ -1366,18 +1366,18 @@ int dup(int oldfd)
+     return -1;
+ }
+ 
+-TRACEPOINT(trace_vfs_dup3, "%d %d 0x%x", int, int, int);
+-TRACEPOINT(trace_vfs_dup3_ret, "%d", int);
+-TRACEPOINT(trace_vfs_dup3_err, "%d", int);
++TRACEPOINT(trace_vfs_dup3fs, "%d %d 0x%x", int, int, int);
++TRACEPOINT(trace_vfs_dup3fs_ret, "%d", int);
++TRACEPOINT(trace_vfs_dup3fs_err, "%d", int);
+ /*
+  * Duplicate a file descriptor to a particular value.
+  */
+-int dup3(int oldfd, int newfd, int flags)
++int dup3fs(int oldfd, int newfd, int flags)
+ {
+     struct file *fp;
+     int error;
+ 
+-    trace_vfs_dup3(oldfd, newfd, flags);
++    trace_vfs_dup3fs(oldfd, newfd, flags);
+     /*
+      * Don't allow any argument but O_CLOEXEC.  But we even ignore
+      * that as we don't support exec() and thus don't care.
+@@ -1403,11 +1403,11 @@ int dup3(int oldfd, int newfd, int flags)
+     }
+ 
+     fdrop(fp);
+-    trace_vfs_dup3_ret(newfd);
++    trace_vfs_dup3fs_ret(newfd);
+     return newfd;
+ 
+     out_errno:
+-    trace_vfs_dup3_err(error);
++    trace_vfs_dup3fs_err(error);
+     errno = error;
+     return -1;
+ }
+@@ -1417,7 +1417,7 @@ int dup2(int oldfd, int newfd)
+     if (oldfd == newfd)
+         return newfd;
+ 
+-    return dup3(oldfd, newfd, 0);
++    return dup3fs(oldfd, newfd, 0);
+ }
+ 
+ /*
+diff --git a/libc/unistd/dup3.cc b/libc/unistd/dup3.cc
+new file mode 100644
+index 0000000..bad4e70
+--- /dev/null
++++ b/libc/unistd/dup3.cc
+@@ -0,0 +1,47 @@
++#include <unistd.h>
++#define open __open_variadic
++#define fcntl __fcntl_variadic
++#include <fcntl.h>
++#undef open
++#undef fcntl
++#include <osv/file.h>
++#include <sys/file.h>
++#include <errno.h>
++#include <fcntl.h>
++
++int dup3(int oldfd, int newfd, int flags)
++{
++    struct file *fp;
++    int error;
++
++    /*
++     * Don't allow any argument but O_CLOEXEC.  But we even ignore
++     * that as we don't support exec() and thus don't care.
++     */
++    if ((flags & ~O_CLOEXEC) != 0) {
++        error = EINVAL;
++        goto out_errno;
++    }
++
++    if (oldfd == newfd) {
++        error = EINVAL;
++        goto out_errno;
++    }
++
++    error = fget(oldfd, &fp);
++    if (error)
++        goto out_errno;
++
++    error = fdset(newfd, fp);
++    if (error) {
++        fdrop(fp);
++        goto out_errno;
++    }
++
++    fdrop(fp);
++    return newfd;
++
++    out_errno:
++    errno = error;
++    return -1;
++}
+diff --git a/linux.cc b/linux.cc
+index 63377c1..a0ceb50 100644
+--- a/linux.cc
++++ b/linux.cc
+@@ -343,6 +343,7 @@ long syscall(long number, ...)
+     SYSCALL3(madvise, void *, size_t, int);
+     SYSCALL0(sched_yield);
+     SYSCALL3(mincore, void *, size_t, unsigned char *);
++    SYSCALL3(dup3, int, int, int);
+     }
+ 
+     debug_always("syscall(): unimplemented system call %d\n", number);
+diff --git a/modules/tests/Makefile b/modules/tests/Makefile
+index 8dea970..1446ea8 100644
+--- a/modules/tests/Makefile
++++ b/modules/tests/Makefile
+@@ -86,7 +86,7 @@ tests := tst-pthread.so misc-ramdisk.so tst-vblk.so tst-bsd-evh.so \
+ 	tst-pthread-setcancelstate.so tst-syscall.so tst-pin.so tst-run.so \
+ 	tst-ifaddrs.so tst-pthread-affinity-inherit.so tst-sem-timed-wait.so \
+ 	tst-ttyname.so tst-pthread-barrier.so tst-feexcept.so tst-math.so \
+-	tst-sigaltstack.so
++	tst-sigaltstack.so tst-dup3.so
+ 
+ #	libstatic-thread-variable.so tst-static-thread-variable.so \
+ 
+diff --git a/tests/tst-dup3.cc b/tests/tst-dup3.cc
+new file mode 100644
+index 0000000..9dc7a91
+--- /dev/null
++++ b/tests/tst-dup3.cc
+@@ -0,0 +1,57 @@
++#include <stdio.h>
++#include <unistd.h>
++#include <memory.h>
++#include <errno.h>
++#include <stdbool.h>
++#include <sys/stat.h>
++#include <fcntl.h>
++
++
++unsigned int tests_total = 0, tests_failed = 0;
++
++void report(const char* name, bool passed)
++{
++   static const char* status[] = {"FAIL", "PASS"};
++   printf("%s: %s\n", status[passed], name);
++   tests_total += 1;
++   tests_failed += !passed;
++}
++
++int main(void)
++{
++   printf("isatty test!\n");
++   // Basic flow for test
++   // 1) Take fds for stdin, stdout and stderr and call ttyname_r and ttyname
++   // 2) Use an invalid fd (-1) and call ttyname_r and ttyname
++
++   int fds[3] = {STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO};
++   int tmpfd = open("/tmp", 0, O_DIRECTORY);
++   dup3(tmpfd, STDIN_FILENO, 0);
++   report("isNOTatty std* fd\0", !isatty(fds[0]));
++   report("isatty std* fd\0", isatty(fds[1]));
++   report("isatty std* fd\0", isatty(fds[2]));
++
++   close(tmpfd);
++   printf("SUMMARY: %u tests / %u failures\n", tests_total, tests_failed);
++#if 0
++      int retval = ttyname_r(fds[i], buf, sizeof(buf));
++      printf("fd: %d ttyname_r retval: %d, buf: %s\n", fds[i], retval, buf);
++      if (fds[i] < 0) {
++         report("[ttyname_r] bad fds\0", retval == EBADF);
++      } else {
++         report("[ttyname_r] std* fd\0",
++                retval == 0 && strcmp(buf, "/dev/console\0") == 0);
++      }
++      char* tty = ttyname(fds[i]);
++      printf("fd: %d ttyname retval: %s\n", fds[i], tty);
++      if (fds[i] < 0) {
++         report("[ttyname] bad fds\0", tty == NULL);
++      } else {
++         report("[ttyname] std* fds\0", strcmp(buf, "/dev/console\0") == 0);
++      }
++      memset(buf, 0, sizeof(buf));
++   }
++#endif
++
++   return 0;
++}
