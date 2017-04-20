@@ -141,10 +141,10 @@ index 8dea970..1446ea8 100644
  
 diff --git a/tests/tst-dup3.cc b/tests/tst-dup3.cc
 new file mode 100644
-index 0000000..9dc7a91
+index 0000000..702b3f2
 --- /dev/null
 +++ b/tests/tst-dup3.cc
-@@ -0,0 +1,57 @@
+@@ -0,0 +1,58 @@
 +#include <stdio.h>
 +#include <unistd.h>
 +#include <memory.h>
@@ -174,9 +174,10 @@ index 0000000..9dc7a91
 +   int fds[3] = {STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO};
 +   int tmpfd = open("/tmp", 0, O_DIRECTORY);
 +   dup3(tmpfd, STDIN_FILENO, 0);
-+   report("isNOTatty std* fd\0", !isatty(fds[0]));
-+   report("isatty std* fd\0", isatty(fds[1]));
-+   report("isatty std* fd\0", isatty(fds[2]));
++   printf("Process: dup3(tmpfd, STDIN_FILENO, 0)\n");
++   report("isNOTatty stdin fd\0", !isatty(fds[0]));
++   report("isatty stdout fd\0", isatty(fds[1]));
++   report("isatty stderr fd\0", isatty(fds[2]));
 +
 +   close(tmpfd);
 +   printf("SUMMARY: %u tests / %u failures\n", tests_total, tests_failed);

@@ -27,9 +27,10 @@ int main(void)
    int fds[3] = {STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO};
    int tmpfd = open("/tmp", 0, O_DIRECTORY);
    dup3(tmpfd, STDIN_FILENO, 0);
-   report("isNOTatty std* fd\0", !isatty(fds[0]));
-   report("isatty std* fd\0", isatty(fds[1]));
-   report("isatty std* fd\0", isatty(fds[2]));
+   printf("Process: dup3(tmpfd, STDIN_FILENO, 0)\n");
+   report("isNOTatty stdin fd\0", !isatty(fds[0]));
+   report("isatty stdout fd\0", isatty(fds[1]));
+   report("isatty stderr fd\0", isatty(fds[2]));
 
    close(tmpfd);
    printf("SUMMARY: %u tests / %u failures\n", tests_total, tests_failed);
