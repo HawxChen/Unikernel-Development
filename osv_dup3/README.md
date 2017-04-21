@@ -10,7 +10,7 @@ This practice achieves the dup3 system call through the following 2 parts.
     * Output
       ````
       isatty test!
-      Process: dup3(tmpfd, STDIN\_FILENO, 0)
+      Process: dup3(tmpfd, STDIN_FILENO, 0)
       PASS: isNOTatty stdin fd
       PASS: isatty stdout fd
       PASS: isatty stderr fd
