@@ -19,40 +19,30 @@ void report(const char* name, bool passed)
 
 int main(void)
 {
-   printf("isatty test!\n");
-   // Basic flow for test
-   // 1) Take fds for stdin, stdout and stderr and call ttyname_r and ttyname
-   // 2) Use an invalid fd (-1) and call ttyname_r and ttyname
-
    int fds[3] = {STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO};
    int tmpfd = open("/tmp", 0, O_DIRECTORY);
-   dup3(tmpfd, STDIN_FILENO, 0);
-   printf("Process: dup3(tmpfd, STDIN_FILENO, 0)\n");
+   int retfd = 0;
+   int new_stdinfd = 45;
+
+   retfd = dup3(STDIN_FILENO, new_stdinfd, 0);
+   report("Return value should be 45\0", retfd == new_stdinfd);
+
+   retfd = dup3(tmpfd, STDIN_FILENO, 0);
+   report("Return value should be 0 \0", retfd == STDIN_FILENO);
+
+
+   retfd = dup3(100, STDOUT_FILENO, 0);
+   report("Return value should be EBADF \0", EBADF == errno);
+
+   retfd = dup3(STDOUT_FILENO, STDOUT_FILENO, 0);
+   report("Return value should be EINVAL \0", EINVAL == errno);
+
    report("isNOTatty stdin fd\0", !isatty(fds[0]));
    report("isatty stdout fd\0", isatty(fds[1]));
    report("isatty stderr fd\0", isatty(fds[2]));
 
    close(tmpfd);
    printf("SUMMARY: %u tests / %u failures\n", tests_total, tests_failed);
-#if 0
-      int retval = ttyname_r(fds[i], buf, sizeof(buf));
-      printf("fd: %d ttyname_r retval: %d, buf: %s\n", fds[i], retval, buf);
-      if (fds[i] < 0) {
-         report("[ttyname_r] bad fds\0", retval == EBADF);
-      } else {
-         report("[ttyname_r] std* fd\0",
-                retval == 0 && strcmp(buf, "/dev/console\0") == 0);
-      }
-      char* tty = ttyname(fds[i]);
-      printf("fd: %d ttyname retval: %s\n", fds[i], tty);
-      if (fds[i] < 0) {
-         report("[ttyname] bad fds\0", tty == NULL);
-      } else {
-         report("[ttyname] std* fds\0", strcmp(buf, "/dev/console\0") == 0);
-      }
-      memset(buf, 0, sizeof(buf));
-   }
-#endif
 
    return 0;
 }
