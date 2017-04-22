@@ -1,4 +1,4 @@
-#### Add dup3, a system call, into osv
+### Add dup3, a system call, into osv
 ----
 This practice achieved the dup3, a system call, through these two parts:
 1. dup3.cc
