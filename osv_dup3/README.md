@@ -1,5 +1,4 @@
-# Add dup3, a system call, into osv
-#### Implementation of Cloud OS functionalities
+#### Add dup3, a system call, into osv
 ----
 This practice achieves the dup3 system call through the following 2 parts.
 1. dup3.cc
