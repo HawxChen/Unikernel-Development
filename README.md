@@ -1,5 +1,5 @@
 # Unikernel-Development
-#### Implementation of functionalities in osv, cloud OS
+#### Implementation of functionalities in cloud OSes
 ----
 
 1. osv_dup3
